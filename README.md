@@ -1,7 +1,3 @@
-Aquí tienes un README.md completo y profesional para la API:
-
----
-
 # API REST - Sistema de Categorías
 
 API RESTful básica desarrollada en PHP puro con arquitectura MVC, diseñada para gestionar categorías con una estructura jerárquica (padre-hijo). Proyecto ideal para evaluar conocimientos de PHP, POO, MySQL y diseño de APIs.
@@ -58,13 +54,7 @@ API REST para la gestión de categorías con estructura jerárquica (subcategor�
 
 ##  Tecnologías Utilizadas
 
-| Tecnología | Versión | Propósito |
-|------------|---------|-----------|
-| **PHP** | 7.4+ | Lenguaje principal |
-| **MySQL** | 5.7+ | Base de datos |
-| **PDO** | - | Conexión segura a BD |
-| **Docker** | 20.10+ | Contenedorización |
-| **Apache** | 2.4+ | Servidor web |
+- [Docker](#docker)
 
 ---
 
@@ -318,12 +308,27 @@ http://localhost/api/v1/categories/1
 
 ---
 
-## 🐳 Docker
+##  Docker
 
-> **⚠️ IMPORTANTE:** Este proyecto está diseñado para ejecutarse con Docker. La configuración completa se detallará en la siguiente sección.
+> **⚠️ IMPORTANTE:** Este proyecto fue implementado con la imagen dokcerLAPM de mattrayner/lamp 
 
-El proyecto incluye una configuración Docker lista para usar que levanta tres contenedores:
+url : https://hub.docker.com/r/mattrayner/lamp
 
+Caracteristicas :
+Component	
+Apache	    2.4.29
+MySQL		5.7.26
+PHP	        7.3.6
+phpMyAdmin	4.9.0.1
+
+```
+
+docker pull mattrayner/lamp
+docker run -i -t --name MyLocalLAMP -p 80:80 -p 3306:3306 -v ${PWD}/app:/app -v ${PWD}/mysql:/var/lib/mysql mattrayner/lamp:latest-1804
+
+docker start MyLocalLAMP
+
+```
 
 
 ---
@@ -332,12 +337,497 @@ El proyecto incluye una configuración Docker lista para usar que levanta tres c
 
 > **⚠️ NOTA:** Para que la API funcione correctamente con el router (amigable), se requieren configuraciones específicas en Apache. Los detalles completos se encuentran en la siguiente sección.
 
-### Configuración Básica
+### 1. Acceder al contenedor Docker
 
-El proyecto requiere:
-1. **RewriteEngine activado** para el enrutamiento
-2. **DirectoryIndex configurado** a `index.php`
-3. **Archivo .htaccess** para permitir URLs amigables
+Primero ingresamos al contenedor donde está corriendo Apache/PHP:
+
+```bash
+docker exec -it MyLocalLAMP bash
+```
+
+Una vez dentro, el prompt cambia a algo parecido a:
+
+```
+root@7520a7b94dc3:/#
+```
+
+A partir de aquí, todos los comandos se ejecutan dentro del contenedor.
+
+---
+
+### 2. Verificar ubicación de la aplicación
+
+Verificamos el contenido del DocumentRoot:
+
+```bash
+ls -la /var/www/html
+```
+
+Apache tiene configurado:
+
+```
+DocumentRoot /var/www/html
+```
+
+Al verificar, descubrimos que `/var/www/html` no era un directorio físico, sino un enlace simbólico:
+
+```bash
+ls -la /var/www/html
+ls -la /var/www/
+```
+
+Encontramos:
+
+```
+/var/www/html -> /app
+```
+
+Estructura:
+
+```
+Apache
+   │
+   ▼
+/var/www/html
+   │
+   └──────► /app
+```
+
+Por lo tanto, aunque Apache tiene `DocumentRoot /var/www/html`, la aplicación realmente está en `/app`. Esta información resultó fundamental para solucionar la configuración de `.htaccess`.
+
+---
+
+### 3. Creación de .htaccess
+
+Para utilizar URLs amigables como `/api/v1/categories` donde el archivo real de entrada es `/index.php`, necesitamos que Apache redirija internamente las peticiones a `index.php`.
+
+Verificamos el contenido:
+
+```bash
+cat /app/.htaccess
+```
+
+El archivo debe contener:
+
+```apache
+Options -Indexes
+
+# Pass Authorization header to PHP
+<IfModule mod_setenvif.c>
+    SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+</IfModule>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>
+```
+
+La parte fundamental es:
+
+```apache
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]
+```
+
+Esto significa: si la URL solicitada no corresponde a un archivo real y tampoco a un directorio real, envíala a `index.php`.
+
+Por ejemplo, `/api/v1/categories` no es un archivo ni un directorio físico, por lo que Apache redirige a `index.php`.
+
+---
+
+### 4. Verificar mod_rewrite
+
+Ejecutamos:
+
+```bash
+apache2ctl -M | grep rewrite
+```
+
+El resultado debe ser:
+
+```
+rewrite_module (shared)
+```
+
+Esto confirma que Apache tiene cargado `mod_rewrite`.
+
+---
+
+### 5. Revisar configuración de Apache
+
+Revisamos el VirtualHost activo:
+
+```bash
+cat /etc/apache2/sites-enabled/000-default.conf
+```
+
+Configuración inicial encontrada:
+
+```apache
+<VirtualHost *:80>
+    DocumentRoot /var/www/html
+    <Directory />
+        Options Indexes FollowSymLinks MultiViews
+        AllowOverride All
+        Order allow,deny
+        allow from all
+    </Directory>
+    ...
+</VirtualHost>
+```
+
+También verificamos la configuración global de Apache:
+
+```apache
+<Directory /var/www/>
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    Require all granted
+</Directory>
+```
+
+El punto crítico era `AllowOverride None`. Esto significa que Apache no permite que `.htaccess` modifique la configuración del directorio. Por eso nuestro `.htaccess` podía existir y estar perfectamente escrito, pero Apache no lo estaba utilizando.
+
+---
+
+### 6. Agregar configuración específica para /var/www/html
+
+Agregamos dentro del VirtualHost:
+
+```apache
+<Directory /var/www/html>
+    Options Indexes FollowSymLinks MultiViews
+    AllowOverride All
+    Require all granted
+</Directory>
+```
+
+Esto le dice a Apache que para `/var/www/html`, permita que `.htaccess` pueda modificar la configuración. La parte fundamental es `AllowOverride All`.
+
+---
+
+### 7. Configurar el directorio real /app
+
+Aunque ya teníamos la configuración para `/var/www/html`, al hacer:
+
+```bash
+curl -i http://localhost/prueba-rewrite
+```
+
+seguía devolviendo:
+
+```
+HTTP/1.1 404 Not Found
+```
+
+con el mensaje "The requested URL was not found on this server." de Apache.
+
+Recordemos que `/var/www/html -> /app`. Por lo tanto, configuramos explícitamente el directorio real:
+
+```apache
+<Directory /app>
+    Options Indexes FollowSymLinks MultiViews
+    AllowOverride All
+    Require all granted
+</Directory>
+```
+
+El VirtualHost terminó teniendo ambos bloques:
+
+```apache
+<Directory /var/www/html>
+    Options Indexes FollowSymLinks MultiViews
+    AllowOverride All
+    Require all granted
+</Directory>
+
+<Directory /app>
+    Options Indexes FollowSymLinks MultiViews
+    AllowOverride All
+    Require all granted
+</Directory>
+```
+
+Este fue el cambio que permitió finalmente que Apache procesara nuestro `.htaccess`.
+
+---
+
+### 8. Verificar sintaxis de Apache
+
+Después de modificar la configuración, siempre debemos comprobar primero la sintaxis:
+
+```bash
+apache2ctl -t
+```
+
+Resultado esperado:
+
+```
+Syntax OK
+```
+
+Esto significa que Apache puede interpretar correctamente la configuración.
+
+---
+
+### 9. Reiniciar Apache
+
+Después de verificar la sintaxis:
+
+```bash
+apache2ctl -t
+```
+
+reiniciamos Apache:
+
+```bash
+service apache2 restart
+```
+
+La finalidad es que Apache vuelva a cargar la configuración modificada.
+
+También podemos comprobar que Apache está funcionando:
+
+```bash
+service apache2 status
+```
+
+**Importante:** Reiniciar el contenedor:
+
+```bash
+docker restart MyLocalLAMP
+```
+
+---
+
+### 10. Crear prueba específica para .htaccess
+
+Antes de probar nuestra API, necesitábamos separar dos problemas:
+
+1. ¿Apache está procesando `.htaccess`?
+2. ¿Nuestra aplicación PHP funciona correctamente?
+
+Para eso utilizamos una URL ficticia `/prueba-rewrite`:
+
+```
+/prueba-rewrite
+       ↓
+.htaccess
+       ↓
+index.php
+```
+
+Ejecutamos:
+
+```bash
+curl -i http://localhost/prueba-rewrite
+```
+
+Antes de solucionar Apache obteníamos:
+
+```
+HTTP/1.1 404 Not Found
+```
+
+con HTML generado por Apache, lo que significaba que la petición no llegaba a `index.php`.
+
+Después de agregar `<Directory /app>` con `AllowOverride All`, la prueba empezó a pasar por `index.php`.
+
+Esta prueba fue especialmente útil porque permitió diagnosticar `.htaccess` sin involucrar todavía la base de datos ni los controladores.
+
+---
+
+### 11. Probar el endpoint final
+
+Una vez solucionados Apache, `.htaccess` y `mod_rewrite`, hicimos la prueba:
+
+```bash
+curl -i http://localhost/api/v1/categories
+```
+
+Resultado esperado:
+
+```
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+[
+    {
+        "id": "1",
+        "name": "Electrónica",
+        "slug": "electronica",
+        "parent_id": null
+    },
+    {
+        "id": "2",
+        "name": "Computadoras",
+        "slug": "computadoras",
+        "parent_id": "1"
+    }
+]
+```
+
+Esto confirmó que toda la aplicación estaba funcionando correctamente.
+
+---
+
+### 12. Flujo final de la petición
+
+Cuando hacemos `curl http://localhost/api/v1/categories`, ocurre el siguiente flujo:
+
+```
+┌──────────────────────────────┐
+│ curl                         │
+│ /api/v1/categories           │
+└──────────────┬───────────────┘
+               │
+               ▼
+┌──────────────────────────────┐
+│ Apache :80                   │
+│ DocumentRoot /var/www/html   │
+└──────────────┬───────────────┘
+               │
+               ▼
+       /var/www/html
+               │
+               │ symlink
+               ▼
+            /app
+               │
+               ▼
+          .htaccess
+               │
+               │ mod_rewrite
+               ▼
+          index.php
+               │
+               ▼
+        routes/api.php
+               │
+               ▼
+     CategoryController
+               │
+               ▼
+        Models/Category
+               │
+               ▼
+           Database
+               │
+               ▼
+        JSON Response
+               │
+               ▼
+          HTTP 200
+```
+
+---
+
+### 13. Checklist para reproducir la solución
+
+Cuando montes la aplicación PHP usando la imagen `mattrayner/lamp:latest-1804`, puedes seguir este checklist:
+
+#### Docker
+```bash
+docker exec -it MyLocalLAMP bash
+```
+
+#### Verificar DocumentRoot
+```bash
+ls -la /var/www/html
+```
+Comprobar si es un enlace: `/var/www/html -> /app`
+
+#### Verificar aplicación
+```bash
+ls -la /app
+```
+
+#### Verificar .htaccess
+```bash
+cat /app/.htaccess
+```
+Debe existir `RewriteEngine On` y las reglas correspondientes.
+
+#### Verificar mod_rewrite
+```bash
+apache2ctl -M | grep rewrite
+```
+Debe aparecer: `rewrite_module (shared)`
+
+#### Verificar VirtualHost
+```bash
+cat /etc/apache2/sites-enabled/000-default.conf
+```
+Asegurarse de tener:
+
+```apache
+<Directory /var/www/html>
+    Options Indexes FollowSymLinks MultiViews
+    AllowOverride All
+    Require all granted
+</Directory>
+
+<Directory /app>
+    Options Indexes FollowSymLinks MultiViews
+    AllowOverride All
+    Require all granted
+</Directory>
+```
+
+#### Verificar sintaxis de Apache
+```bash
+apache2ctl -t
+```
+Debe responder: `Syntax OK`
+
+#### Reiniciar Apache
+```bash
+service apache2 restart
+```
+
+#### Reiniciar contenedor
+```bash
+docker restart MyLocalLAMP
+```
+
+#### Probar .htaccess
+```bash
+curl -i http://localhost/prueba-rewrite
+```
+La petición debe llegar a `index.php`, no producir el HTML de 404 de Apache.
+
+#### Probar PHP
+```bash
+curl -i http://localhost/index.php
+```
+Un JSON 404 de tu aplicación demuestra que `index.php` está siendo ejecutado.
+
+#### Validar controlador PHP
+```bash
+php -l /app/Controllers/CategoryController.php
+```
+
+#### Probar carga del controlador
+```bash
+php -r "require_once '/app/Controllers/CategoryController.php'; echo 'Controller cargado correctamente';"
+```
+
+#### Probar API
+```bash
+curl -i http://localhost/api/v1/categories
+```
+
+Resultado esperado:
+
+```
+HTTP/1.1 200 OK
+Content-Type: application/json
+```
 
 ---
 
