@@ -1,6 +1,6 @@
 # API REST - Sistema de Categorías
 
-API RESTful básica desarrollada en PHP puro con arquitectura MVC, diseñada para gestionar categorías con una estructura jerárquica (padre-hijo). Proyecto ideal para evaluar conocimientos de PHP, POO, MySQL y diseño de APIs.
+API RESTful básica desarrollada en PHP puro con arquitectura MVC.
 
 ---
 
