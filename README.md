@@ -275,7 +275,7 @@ cd api-categorias
 #### 2. Levantar los contenedores
 [Docker](#docker)
 
-# 3. Esperar a que MySQL esté listo (unos 30 segundos)
+#### 3. Esperar a que MySQL esté listo (unos 30 segundos)
 ```
 # 4. Probar la API
 curl http://localhost/api/v1/categories
