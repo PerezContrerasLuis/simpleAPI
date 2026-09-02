@@ -271,12 +271,12 @@ curl http://localhost/api/v1/categories
 # 1. Clonar el repositorio
 git clone git@github.com:PerezContrerasLuis/simpleAPI.git
 cd api-categorias
-
+```
 # 2. Levantar los contenedores
----- pendiente 
+[Docker](#docker)
 
 # 3. Esperar a que MySQL esté listo (unos 30 segundos)
-
+```
 # 4. Probar la API
 curl http://localhost/api/v1/categories
 ```
