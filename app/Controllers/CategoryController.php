@@ -1,6 +1,7 @@
 <?php
 
-require_once 'Models/Category.php';
+
+require_once __DIR__ . '/../Models/Category.php';
 
 class CategoryController
 {
@@ -11,7 +12,7 @@ class CategoryController
         $this->model = new Category();
     }
 
-    public function getAll()
+    public function getAll($params = null)
     {
         try {
             header('Content-Type: application/json');
