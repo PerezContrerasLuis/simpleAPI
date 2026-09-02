@@ -24,4 +24,19 @@ class Category {
         
     }
 
+    public function getById ($id)
+    {
+        try {
+            $query = "SELECT * FROM categories WHERE id =:id";
+            $stmt = $this->db->prepare($query);
+            $stmt->execute([':id' => $id]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            
+        } catch (PDOException $e)
+        {
+            throw new Exception("Error :".$e->getMessage());
+        }
+        
+    }
+
 }
